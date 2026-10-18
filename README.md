@@ -21,7 +21,6 @@ AI-powered code review and repository governance service built with TypeScript, 
 - [Repository Policy](#repository-policy)
 - [Observability](#observability)
 - [Testing](#testing)
-- [License](#license)
 
 ---
 
@@ -1060,9 +1059,3 @@ Backend tests use the Node.js built-in test runner (`node:test`). Recommended re
 - Policy validation
 - Notification adapters
 - NestJS module wiring
-
----
-
-## License
-
-Private — see repository for details.
