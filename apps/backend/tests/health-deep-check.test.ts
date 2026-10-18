@@ -88,3 +88,71 @@ test("health deep check skips live provider request by default", async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+test("health deep check supports groq provider config probe", async () => {
+  const originalProvider = process.env.AI_PROVIDER;
+  const originalGroqKey = process.env.GROQ_API_KEY;
+  const originalLiveProbe = process.env.HEALTHCHECK_AI_LIVE_PROBE;
+
+  process.env.AI_PROVIDER = "groq";
+  process.env.GROQ_API_KEY = "test-groq-key";
+  delete process.env.HEALTHCHECK_AI_LIVE_PROBE;
+
+  try {
+    const service = new AppService();
+    const result = await service.getHealth({
+      mode: "nest",
+      deep: true,
+    });
+
+    assert.equal(result.checks?.ai.provider, "groq");
+    assert.equal(result.checks?.ai.ok, true);
+    assert.equal(result.checks?.ai.status, 204);
+  } finally {
+    process.env.AI_PROVIDER = originalProvider;
+    process.env.GROQ_API_KEY = originalGroqKey;
+    process.env.HEALTHCHECK_AI_LIVE_PROBE = originalLiveProbe;
+  }
+});
+
+test("health deep check supports groq provider live probe", async () => {
+  const originalProvider = process.env.AI_PROVIDER;
+  const originalGroqKey = process.env.GROQ_API_KEY;
+  const originalLiveProbe = process.env.HEALTHCHECK_AI_LIVE_PROBE;
+  const originalFetch = globalThis.fetch;
+
+  process.env.AI_PROVIDER = "groq";
+  process.env.GROQ_API_KEY = "test-groq-key";
+  process.env.HEALTHCHECK_AI_LIVE_PROBE = "true";
+
+  let fetchedUrl = "";
+  let authHeader = "";
+  globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+    fetchedUrl = String(url);
+    authHeader = String((init?.headers as Record<string, string>)?.authorization || "");
+    return new Response(JSON.stringify({ data: [] }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  try {
+    const service = new AppService();
+    const result = await service.getHealth({
+      mode: "nest",
+      deep: true,
+    });
+
+    assert.equal(result.checks?.ai.provider, "groq");
+    assert.equal(result.checks?.ai.ok, true);
+    assert.equal(result.checks?.ai.status, 200);
+    assert.equal(fetchedUrl, "https://api.groq.com/openai/v1/models");
+    assert.equal(authHeader, "Bearer test-groq-key");
+  } finally {
+    process.env.AI_PROVIDER = originalProvider;
+    process.env.GROQ_API_KEY = originalGroqKey;
+    process.env.HEALTHCHECK_AI_LIVE_PROBE = originalLiveProbe;
+    globalThis.fetch = originalFetch;
+  }
+});
+

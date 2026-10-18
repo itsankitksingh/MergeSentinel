@@ -70,7 +70,7 @@ export {
   buildGeminiGenerationConfig,
   shouldRetryGeminiWithoutSchema,
 } from "./ai-provider-gemini.js";
-type AIProvider = "openai" | "openai-compatible" | "anthropic" | "gemini";
+type AIProvider = "openai" | "openai-compatible" | "groq" | "anthropic" | "gemini";
 
 const DEFAULT_AI_HTTP_TIMEOUT_MS = 30_000;
 const DEFAULT_AI_ASK_HTTP_TIMEOUT_MS = 60_000;
@@ -210,7 +210,11 @@ export async function analyzePullRequest(
   const prompt = buildUserPrompt(pullRequest);
 
   const parsed = await runtime.concurrencyLimiter.withLimit(async () => {
-    if (provider === "openai" || provider === "openai-compatible") {
+    if (
+      provider === "openai" ||
+      provider === "openai-compatible" ||
+      provider === "groq"
+    ) {
       return analyzeWithOpenAI({ provider, model, prompt, runtime });
     }
     if (provider === "anthropic") {
@@ -255,7 +259,11 @@ export async function answerPullRequestQuestion(
 
   const parsed = await runtime.concurrencyLimiter.withLimit(async () => {
     try {
-      if (provider === "openai" || provider === "openai-compatible") {
+      if (
+        provider === "openai" ||
+        provider === "openai-compatible" ||
+        provider === "groq"
+      ) {
         return await askWithOpenAI({ provider, model, prompt, locale, runtime });
       }
       if (provider === "anthropic") {
@@ -280,7 +288,11 @@ export async function answerPullRequestQuestion(
         locale,
       });
 
-      if (provider === "openai" || provider === "openai-compatible") {
+      if (
+        provider === "openai" ||
+        provider === "openai-compatible" ||
+        provider === "groq"
+      ) {
         return askWithOpenAI({ provider, model, prompt: compactPrompt, locale, runtime });
       }
       if (provider === "anthropic") {
@@ -299,6 +311,10 @@ function resolveProvider(): AIProvider {
 
   if (raw === "openai") {
     return "openai";
+  }
+
+  if (raw === "groq") {
+    return "groq";
   }
 
   if (
@@ -326,6 +342,10 @@ function resolveModel(provider: AIProvider): string {
     return genericModel;
   }
 
+  if (provider === "groq") {
+    return readStringEnv("GROQ_MODEL", "openai/gpt-oss-120b");
+  }
+
   if (provider === "openai") {
     return readStringEnv("OPENAI_MODEL", "gpt-4.1-mini");
   }
@@ -342,18 +362,29 @@ function resolveModel(provider: AIProvider): string {
 }
 
 function resolveOpenAIApiKey(provider: AIProvider): string | undefined {
+  if (provider === "groq") {
+    return (
+      readOptionalStringEnv("GROQ_API_KEY") ??
+      readOptionalStringEnv("OPENAI_COMPATIBLE_API_KEY") ??
+      readOptionalStringEnv("OPENAI_API_KEY")
+    );
+  }
+
   return provider === "openai-compatible"
     ? (readOptionalStringEnv("OPENAI_COMPATIBLE_API_KEY") ?? readOptionalStringEnv("OPENAI_API_KEY"))
     : readOptionalStringEnv("OPENAI_API_KEY");
 }
 
 function resolveOpenAIClientForProvider(params: {
-  provider: "openai" | "openai-compatible";
+  provider: "openai" | "openai-compatible" | "groq";
   timeoutMs: number;
   runtime: AiReviewerRuntime;
 }): OpenAI {
   const apiKey = resolveOpenAIApiKey(params.provider);
   if (!apiKey) {
+    if (params.provider === "groq") {
+      throw new Error("Missing GROQ_API_KEY (or OPENAI_API_KEY)");
+    }
     throw new Error(
       params.provider === "openai-compatible"
         ? "Missing OPENAI_COMPATIBLE_API_KEY (or OPENAI_API_KEY)"
@@ -361,7 +392,11 @@ function resolveOpenAIClientForProvider(params: {
     );
   }
 
-  const baseURL = readOptionalStringEnv("OPENAI_BASE_URL");
+  const baseURL =
+    params.provider === "groq"
+      ? readStringEnv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+      : readOptionalStringEnv("OPENAI_BASE_URL");
+
   if (params.provider === "openai-compatible" && !baseURL) {
     throw new Error("Missing OPENAI_BASE_URL for AI_PROVIDER=openai-compatible");
   }
@@ -427,7 +462,7 @@ function logAiDebug(event: string, metadata?: Record<string, unknown>): void {
 }
 
 async function callOpenAIJsonWithFallback(params: {
-  provider: "openai" | "openai-compatible";
+  provider: "openai" | "openai-compatible" | "groq";
   model: string;
   prompt: string;
   systemPrompt: string;
@@ -461,7 +496,7 @@ async function callOpenAIJsonWithFallback(params: {
     return parseJsonFromModelText(text);
   } catch (error) {
     if (
-      params.provider !== "openai-compatible" ||
+      (params.provider !== "openai-compatible" && params.provider !== "groq") ||
       !shouldTryOpenAICompatibleFallback(error)
     ) {
       throw error;
@@ -517,7 +552,7 @@ async function callOpenAIJsonWithFallback(params: {
 }
 
 async function analyzeWithOpenAI(params: {
-  provider: "openai" | "openai-compatible";
+  provider: "openai" | "openai-compatible" | "groq";
   model: string;
   prompt: string;
   runtime: AiReviewerRuntime;
@@ -538,7 +573,7 @@ async function analyzeWithOpenAI(params: {
 async function analyzeWithAnthropic(params: {
   model: string;
   prompt: string;
-}): Promise<unknown> {
+  }): Promise<unknown> {
   return callAnthropicJson({
     model: params.model,
     prompt: params.prompt,
@@ -566,7 +601,7 @@ async function analyzeWithGemini(params: {
 }
 
 async function askWithOpenAI(params: {
-  provider: "openai" | "openai-compatible";
+  provider: "openai" | "openai-compatible" | "groq";
   model: string;
   prompt: string;
   locale: UiLocale;
@@ -778,6 +813,14 @@ function shouldUseLiveAiHealthProbe(
 }
 
 function probeProviderConfig(provider: AIProvider): number {
+  if (provider === "groq") {
+    const apiKey = resolveOpenAIApiKey(provider);
+    if (!apiKey) {
+      throw new Error("Missing GROQ_API_KEY (or OPENAI_API_KEY)");
+    }
+    return 204;
+  }
+
   if (provider === "openai" || provider === "openai-compatible") {
     const apiKey = resolveOpenAIApiKey(provider);
     if (!apiKey) {
@@ -814,9 +857,16 @@ async function probeProviderRequest(
   model: string,
   timeoutMs: number,
 ): Promise<number> {
-  if (provider === "openai" || provider === "openai-compatible") {
+  if (
+    provider === "openai" ||
+    provider === "openai-compatible" ||
+    provider === "groq"
+  ) {
     const apiKey = resolveOpenAIApiKey(provider);
     if (!apiKey) {
+      if (provider === "groq") {
+        throw new Error("Missing GROQ_API_KEY (or OPENAI_API_KEY)");
+      }
       throw new Error(
         provider === "openai-compatible"
           ? "Missing OPENAI_COMPATIBLE_API_KEY (or OPENAI_API_KEY)"
@@ -824,9 +874,11 @@ async function probeProviderRequest(
       );
     }
     const baseUrl =
-      provider === "openai-compatible"
-        ? (readOptionalStringEnv("OPENAI_BASE_URL") ?? "")
-        : "https://api.openai.com/v1";
+      provider === "groq"
+        ? readStringEnv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+        : provider === "openai-compatible"
+          ? (readOptionalStringEnv("OPENAI_BASE_URL") ?? "")
+          : "https://api.openai.com/v1";
     if (!baseUrl) {
       throw new Error("Missing OPENAI_BASE_URL for AI_PROVIDER=openai-compatible");
     }

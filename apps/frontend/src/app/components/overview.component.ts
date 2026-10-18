@@ -149,7 +149,7 @@ import { AgentApiService } from '../services/agent-api.service';
             <div class="topology-box box-ai">
               <div class="box-tag badge badge-purple">LLM Engine</div>
               <h4>AI Providers</h4>
-              <p>OpenAI, Google Gemini, Anthropic Claude, or local OpenAI-compatible endpoints.</p>
+              <p>Groq (LPU inference), OpenAI, Google Gemini, Anthropic Claude, or OpenAI-compatible endpoints.</p>
               <code>Zod Schema Validation</code>
             </div>
           </div>

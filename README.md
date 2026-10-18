@@ -79,6 +79,7 @@ AI-powered code review and repository governance service built with TypeScript, 
 - GitHub Actions — not supported
 
 **Multi-Provider AI**
+- Groq (Ultra-fast LPU inference: GPT-OSS 120B, Qwen 3.8, Llama 3.3)
 - OpenAI
 - OpenAI-compatible (DeepSeek, etc.)
 - Anthropic (Claude)
@@ -484,10 +485,20 @@ Legacy minimal examples for plain GitHub Webhook and GitLab remain in the reposi
 ```mermaid
 graph LR
     ENV[AI_PROVIDER env var]
+    ENV -->|groq| GRQ[Groq<br/>GROQ_API_KEY + GROQ_MODEL]
     ENV -->|openai| OAI[OpenAI<br/>OPENAI_API_KEY + OPENAI_MODEL]
     ENV -->|openai-compatible| OC[OpenAI-Compatible<br/>OPENAI_BASE_URL + OPENAI_COMPATIBLE_MODEL]
     ENV -->|anthropic| ANT[Anthropic<br/>ANTHROPIC_API_KEY + ANTHROPIC_MODEL]
     ENV -->|gemini| GEM[Gemini<br/>GEMINI_API_KEY + GEMINI_MODEL]
+```
+
+**Groq (Ultra-fast LPU inference)**
+```env
+AI_PROVIDER=groq
+GROQ_API_KEY=gsk_...
+GROQ_MODEL=openai/gpt-oss-120b
+# Recommended models: openai/gpt-oss-120b | qwen/qwen3.8-27b | openai/gpt-oss-20b | llama-3.3-70b-versatile
+# GROQ_BASE_URL=https://api.groq.com/openai/v1
 ```
 
 **OpenAI (default)**
